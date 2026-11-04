@@ -28,7 +28,7 @@ const USAGE = {
     models: [{ model: "accounts/fireworks/models/glm-5p3", total: 1 }, { model: "accounts/fireworks/models/kimi-k2p5", total: 0.5 }],
     days: [],
   },
-  savings: { status: "ready", baselineLabel: "Claude Opus 5.5", month: { saved: 6.64, savedFraction: 0.67, cacheHitFraction: 0.95, currency: "USD" } },
+  savings: { status: "ready", baselineLabel: "Claude Opus 5.5", month: { saved: 6.64, savedFraction: 0.67, cacheHitFraction: 0.95, currency: "USD" }, spend: { currency: "USD", total: 11.75, days: [{ date: "2026-11-03", total: 4.25 }, { date: "2026-11-04", total: 7.5 }] } },
 }
 
 globalThis.fetch = async (url) => {
@@ -100,14 +100,14 @@ render()
 await new Promise((resolve) => setTimeout(resolve, 20))
 
 const strings = []
-const walk = (node) => {
+const walk = (node, sink = strings) => {
   if (node == null || typeof node === "boolean") return
-  if (typeof node === "string" || typeof node === "number") { strings.push(String(node)); return }
-  if (Array.isArray(node)) { node.forEach(walk); return }
+  if (typeof node === "string" || typeof node === "number") { sink.push(String(node)); return }
+  if (Array.isArray(node)) { node.forEach((n) => walk(n, sink)); return }
   if (typeof node === "object" && "props" in node) {
     // Function components render by invocation, as React does.
-    if (typeof node.type === "function") { walk(node.type(node.props)); return }
-    walk(node.props.children)
+    if (typeof node.type === "function") { walk(node.type(node.props), sink); return }
+    walk(node.props.children, sink)
   }
 }
 walk(lastTree)
@@ -139,9 +139,23 @@ assert.ok(text.includes("Resets"), "reset text rendered")
 assert.ok(text.includes("Pro"), "tier badge rendered")
 assert.ok(text.includes("Spend by model"), "breakdown section rendered")
 assert.ok(text.includes("accounts/fireworks/models/glm-5p3"), "model row rendered")
+assert.ok(text.includes("Daily spend · live"), "live spend trend rendered")
+assert.ok(text.includes("$1.50 this period"), "attributed window total rendered")
 assert.ok(text.includes("$6.64"), "savings amount rendered")
 assert.ok(text.includes("cache hit"), "cache hit rendered")
 assert.ok(!text.includes("undefined"), "no undefined leaked into text")
+
+// Second pass: attribution still pending (INCOMPLETE, no rows) → the panel
+// keeps the section alive with the pending note and the live spend trend.
+stateSlot = { loading: false, error: null, usage: { ...USAGE, breakdown: { currency: "USD", total: 0, models: [], days: [], completeness: "INCOMPLETE", widened: false } } }
+rerender()
+const pendingStrings = []
+walk(lastTree, pendingStrings)
+const pendingText = pendingStrings.join(" ")
+assert.ok(pendingText.includes("Model attribution pending"), `pending note rendered (got: ${pendingText.slice(0, 300)})`)
+assert.ok(pendingText.includes("$11.75 this month · live"), "live spend total labeled while pending")
+assert.ok(pendingText.includes("Daily spend · live"), "live spend trend still rendered while pending")
+assert.ok(!pendingText.includes("undefined"), "no undefined leaked into pending text")
 
 console.log("client-render: ok")
 console.log("rendered text:", text.slice(0, 300))

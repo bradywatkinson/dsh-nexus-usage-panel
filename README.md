@@ -13,11 +13,12 @@ The panel reads the same private REST API that [nexus.fireworks.ai](https://nexu
 |---|---|
 | `GET /v1/accounts/{account}/nexusPlans` | Active plan tier + billing period |
 | `GET /v1/accounts/{account}/users/{user}/nexusPlanUsage` | `monthly` and 5-hour `rollingWindow` usage percents + reset times |
-| `POST /v1/accounts/{account}/usageCosts:query` | (Milestone 2) per-day, per-model spend |
+| `POST /v1/accounts/{account}/usageCosts:query` | (Milestone 2) per-day, per-model spend — lags the meters with billing attribution |
+| `POST /v1/accounts/{account}/usageSavings:query` | (Milestone 2) live per-day spend, estimated savings + cache-hit rate |
 
 Auth uses the per-machine key the Nexus desktop app minted at sign-in, stored in the **macOS login keychain** (service `FireworksAI`, account `fireworks-api-key`). The key never leaves the host process; the browser only ever sees sanitized percentages. Overrides: `FIREWORKS_NEXUS_KEY` env or the plugin's `apiKey` config; gateway override via `NEXUS_GATEWAY_URL` / `gatewayBase` config.
 
-Note: the API exposes **percentages of your plan limits only** — dollar allowances are not disclosed to members. DSH sessions themselves run through Nexus Auto (`api.fireworks.ai/inference/v1`, model `auto`); Fireworks routes server-side and does not echo the routed model id to the client.
+Note: `nexusPlanUsage` exposes **percentages of your plan limits only** — but the savings endpoint does return dollar spend to a member key (see [docs/milestone-2-schema.md](docs/milestone-2-schema.md)). Per-model spend arrives only through `usageCosts:query`, whose attribution **lags the meters** (`INCOMPLETE`, no rows early in a period): while it's pending, the panel shows an attribution-pending note plus a **live daily-spend trend** read from the savings pipeline, and widens the model query to the last 30 days so prior-period rows display as soon as they're attributed. DSH sessions themselves run through Nexus Auto (`api.fireworks.ai/inference/v1`, model `auto`); Fireworks routes server-side and does not echo the routed model id to the client.
 
 ## Install
 
@@ -49,7 +50,7 @@ Repo layout: `lib/index.js` (host: cordis plugin, serves `/api/dsh-nexus-usage/u
 ## Roadmap
 
 - Issues: https://github.com/bradywatkinson/dsh-nexus-usage-panel/issues
-- Milestone 2 (#3): per-model/token breakdown via `usageCosts:query`.
+- Milestone 2 (#3): per-model/token breakdown via `usageCosts:query` — model rows render as soon as attribution completes; until then the panel shows live spend + savings. Token-level detail is not exposed by any verified endpoint.
 
 ## License
 

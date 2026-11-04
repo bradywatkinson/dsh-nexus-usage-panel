@@ -14,7 +14,7 @@ Yes — a private (undocumented but real) REST API on Fireworks' public gateway 
   - `POST accounts/{accountId}/usageCosts:query` body `{ startTime, endTime, scope: "SELF", groupBy: ["DAY","MODEL"] }` → per-day, per-model spend rows (`subtotal` as google.type.Money) — **Milestone 2's model/token breakdown source**
   - `POST accounts/{accountId}/usageSavings:query` → savings vs baseline model (baseline `claude-opus-5-5`), 403 = admin-only, code 9 = not enabled
   - `GET accounts/{accountId}/users/{userId}/usageLimits` → Enterprise member spend limits
-- **Semantics**: "2% used" is `monthly.usedPercent`; session window is `rollingWindow.usedPercent` with `endTime` = reset time. Dollar amounts are hidden from members (Fireworks staff only); members see percents.
+- **Semantics**: "2% used" is `monthly.usedPercent`; session window is `rollingWindow.usedPercent` with `endTime` = reset time. `nexusPlanUsage` exposes **percentages only** — but `usageSavings:query` returns dollar amounts to a SELF member key (verified live 2026-11-04: actual $11.58 vs baseline $22.56, savings $10.98, cache hit 92%); see [milestone-2-schema.md](milestone-2-schema.md). Its per-day rows are current even while `usageCosts:query` attribution is still `INCOMPLETE`, though its per-model split is plan-gated (403).
 - **Which model is this session running?** The DSH desktop profile routes via `https://api.fireworks.ai/inference/v1` with model id `auto` ("Nexus Auto") — routing is server-side at Fireworks; the client never learns the routed model. Per-model attribution must come from `usageCosts:query` (Milestone 2).
 
 ## Acceptance
