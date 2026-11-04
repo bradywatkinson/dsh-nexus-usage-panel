@@ -28,6 +28,13 @@ pnpm add dsh-nexus-usage-panel
 
 Or in the DSH Web GUI: **Plugins → Install**, spec `dsh-nexus-usage-panel`. Then reload; open **Settings → Nexus Usage**.
 
+From GitHub without npm: **Plugins → Install** with spec
+`github:bradywatkinson/dsh-nexus-usage-panel`.
+
+Via the experimental **Discover** tab (custom plugin markets): add index source
+`https://raw.githubusercontent.com/bradywatkinson/dsh-nexus-usage-panel/main/market/index.json`
+and install **Nexus Usage** from the card. The index is format-1, validated with `@deepseek-ai/dsh-plugin-market-index`.
+
 - macOS only for the keychain read (the Nexus desktop app must be signed in once).
 - One gateway read per minute (cached); each of plan/seat fails independently, like the app.
 

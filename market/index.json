@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "title": "Brady's DSH plugins",
+  "description": "Community DSH plugins: the Nexus usage dashboard panel.",
+  "plugins": [
+    {
+      "name": "dsh-nexus-usage-panel",
+      "title": "Nexus Usage",
+      "description": "Nexus usage dashboard panel: Fireworks Nexus plan usage (monthly %, 5-hour session %, reset times, Pro badge) read from the same private API the Nexus desktop app uses.",
+      "author": "bradywatkinson",
+      "homepage": "https://github.com/bradywatkinson/dsh-nexus-usage-panel#readme",
+      "repository": { "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel" },
+      "metadata": { "keywords": ["nexus", "fireworks", "usage", "dashboard", "panel"] },
+      "versions": [
+        {
+          "version": "0.1.1",
+          "publishTimestamp": 1793772928,
+          "source": { "type": "git", "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel", "commit": "fddcbe07f6c529adec54ddb15546e5d5289348ce" },
+          "engines": { "dsh": ">=0.1.1-rc.2 <0.3.0" }
+        }
+      ]
+    }
+  ]
+}
