@@ -113,6 +113,25 @@ const walk = (node) => {
 walk(lastTree)
 const text = strings.join(" ")
 
+// Meter fill widths must reflect the real fractions (regression: the 0.2.0
+// Meter treated 0–1 fractions as 0–100 percents, rendering a 2.6% fill as a
+// 0.026%-wide sliver).
+const widths = []
+const walkWidths = (node) => {
+  if (node == null || typeof node === "boolean") return
+  if (Array.isArray(node)) { node.forEach(walkWidths); return }
+  if (typeof node === "object" && "props" in node) {
+    if (typeof node.type === "function") { walkWidths(node.type(node.props)); return }
+    const width = node.props?.style?.width
+    if (typeof width === "string" && width.endsWith("%") && width !== "100%") widths.push(width)
+    walkWidths(node.props.children)
+  }
+}
+walkWidths(lastTree)
+assert.ok(widths.includes("2.57%"), `monthly meter fill 2.57% (got: ${widths.join(", ")})`)
+assert.ok(widths.includes("12.86%"), `session meter fill 12.86% (got: ${widths.join(", ")})`)
+assert.ok(widths.includes("50%"), `second model meter fill 50% (got: ${widths.join(", ")})`)
+
 assert.ok(text.includes("This month"), `monthly header rendered (got: ${text.slice(0, 200)})`)
 assert.ok(text.includes("2.6%"), "monthly percent rendered")
 assert.ok(text.includes("12.9%") || text.includes("13%"), "session percent rendered")
