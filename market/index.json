@@ -9,14 +9,42 @@
       "description": "Nexus usage dashboard panel: Fireworks Nexus plan usage (monthly %, 5-hour session %, reset times, Pro badge) read from the same private API the Nexus desktop app uses.",
       "author": "bradywatkinson",
       "homepage": "https://github.com/bradywatkinson/dsh-nexus-usage-panel#readme",
-      "repository": { "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel" },
-      "metadata": { "keywords": ["nexus", "fireworks", "usage", "dashboard", "panel"] },
+      "repository": {
+        "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel"
+      },
+      "metadata": {
+        "keywords": [
+          "nexus",
+          "fireworks",
+          "usage",
+          "dashboard",
+          "panel"
+        ]
+      },
       "versions": [
+        {
+          "version": "0.2.0",
+          "publishTimestamp": 1793773524,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel",
+            "commit": "09e46c8de159de3e16169c5e8f54fab4fb5b8800"
+          },
+          "engines": {
+            "dsh": ">=0.1.1-rc.2 <0.3.0"
+          }
+        },
         {
           "version": "0.1.1",
           "publishTimestamp": 1793772928,
-          "source": { "type": "git", "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel", "commit": "fddcbe07f6c529adec54ddb15546e5d5289348ce" },
-          "engines": { "dsh": ">=0.1.1-rc.2 <0.3.0" }
+          "source": {
+            "type": "git",
+            "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel",
+            "commit": "fddcbe07f6c529adec54ddb15546e5d5289348ce"
+          },
+          "engines": {
+            "dsh": ">=0.1.1-rc.2 <0.3.0"
+          }
         }
       ]
     }
