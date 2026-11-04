@@ -1,0 +1,6 @@
+# Mount the Nexus usage panel as a bundle row. The host half registers the
+# /api/dsh-nexus-usage routes; the client half registers a "Nexus Usage"
+# settings section rendering the dashboard card.
+- insert:
+    - id: ui-nexus-usage-panel
+      name: 'dsh-nexus-usage-panel'
