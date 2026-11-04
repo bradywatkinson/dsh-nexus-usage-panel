@@ -3,7 +3,7 @@
 import assert from "node:assert/strict"
 import { __testing } from "../lib/index.js"
 
-const { currentPlan, seatUsage, gatewayBase, readUsage } = __testing
+const { currentPlan, seatUsage, gatewayBase, readUsage, spendSummary, savingsModelName, savingsStatus, spendRange, moneyValue } = __testing
 
 // currentPlan picks the non-ended plan and maps tier names.
 const plans = [
@@ -30,9 +30,22 @@ assert.equal(gatewayBase({ NEXUS_GATEWAY_URL: "http://localhost:8080/" }), "http
 const responses = {
   "accounts/acct/nexusPlans?pageSize=10": { nexusPlans: plans },
   "accounts/acct/users/u1/nexusPlanUsage": { monthly: { usedPercent: 2.5, endTime: "2026-12-03T00:00:00Z" }, rollingWindow: { usedPercent: 12.9, endTime: "2026-11-04T05:17:52Z" } },
+  "accounts/acct/usageCosts:query": {
+    attributionCompleteness: "COMPLETE",
+    rows: [
+      { dimensions: { startTime: "2026-11-03T10:00:00Z", model: "accounts/fireworks/models/kimi-k2p5" }, subtotal: { currencyCode: "USD", units: "0", nanos: 5e8 } },
+      { dimensions: { startTime: "2026-11-04T01:00:00Z", model: "accounts/fireworks/models/glm-5p3" }, subtotal: { currencyCode: "USD", units: "1", nanos: 0 } },
+    ],
+    nextPageToken: "",
+  },
+  "accounts/acct/usageSavings:query": {
+    basis: { baselineModelId: "claude-opus-5-5" },
+    total: { actualTotalCost: { currencyCode: "USD", units: "1", nanos: 5e8 }, baselineCost: { currencyCode: "USD", units: "3", nanos: 0 }, estimatedSavings: { currencyCode: "USD", units: "1", nanos: 5e8 }, estimatedSavingsFraction: 0.5, cacheHitRateFraction: 0.25 },
+  },
 }
 const value = await readUsage({
   key: "k", accountId: "acct", userName: "accounts/acct/users/u1",
+  now: new Date("2026-11-04T12:00:00Z"),
   fetch: async (url) => {
     const path = url.replace(/^https:\/\/api\.fireworks\.ai\/v1\//, "")
     const body = responses[path]
@@ -46,6 +59,28 @@ assert.equal(value.seat.monthly.usedPercent, 2.5)
 assert.equal(value.seat.session.usedPercent, 12.9)
 assert.equal(value.planError, null)
 assert.equal(value.seatError, null)
+// Milestone 2 reads
+assert.equal(value.breakdown.models.length, 2)
+assert.equal(value.breakdown.models[0].model, "accounts/fireworks/models/glm-5p3")
+assert.equal(value.breakdown.models[0].total, 1)
+assert.equal(value.breakdown.completeness, "COMPLETE")
+assert.deepEqual(value.breakdown.days.map((d) => d.date), ["2026-11-03", "2026-11-04"])
+assert.equal(value.savings.status, "ready")
+assert.equal(value.savings.month.saved, 1.5)
+assert.equal(value.savings.month.cacheHitFraction, 0.25)
+assert.equal(value.savings.baselineLabel, "Claude Opus 5.5")
+
+// Pure shapers
+assert.equal(moneyValue({ units: "2", nanos: 5e8 }), 2.5)
+assert.equal(moneyValue(null), 0)
+assert.equal(spendSummary([]).models.length, 0)
+assert.equal(savingsModelName("glm-5p3"), "GLM 5.3")
+assert.equal(savingsStatus({ status: 403 }), "admin-only")
+assert.equal(savingsStatus({ code: 9 }), "not-enabled")
+assert.equal(savingsStatus({}), "error")
+// spendRange uses the plan period when underway
+const range = spendRange(plan, new Date("2026-11-04T00:00:00Z"))
+assert.equal(range.start.toISOString(), "2026-11-03T00:00:00.000Z")
 
 // A failing plan read leaves seat as null and records the error, sanitized.
 const failed = await readUsage({

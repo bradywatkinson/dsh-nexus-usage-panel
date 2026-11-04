@@ -1,7 +1,7 @@
 # dsh-nexus-usage-panel
 
 Nexus usage dashboard panel for the [DeepSeek Harness](https://github.com/deepseek-ai) (DSH) Web GUI.
-It mirrors the **Fireworks Nexus** desktop app's Overview card — plan tier badge, "This month — N% used · Resets <date>", and "N% Current session · Resets at <time>" with pink meters — as a **Nexus Usage** page in the DSH Web GUI.
+It mirrors the **Fireworks Nexus** desktop app's Overview card — plan tier badge, "This month — N% used · Resets <date>", and "N% Current session · Resets at <time>" with pink meters — as a **Nexus Usage** page in the DSH Web GUI, and goes beyond it with a **per-model spend breakdown** and an **estimated savings + cache-hit** line (Milestone 2 introspection).
 
 ![What it mirrors: the Nexus Overview usage card](docs/nexus-overview.webp)
 
