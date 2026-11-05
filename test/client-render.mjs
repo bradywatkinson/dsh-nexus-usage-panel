@@ -45,7 +45,7 @@ let effectRan = false
 const fakeReact = {
   useState(init) {
     if (stateSlot === undefined) stateSlot = typeof init === "function" ? init() : init
-    return [stateSlot, (v) => { stateSlot = v; rerender?.() }]
+    return [stateSlot, (v) => { stateSlot = typeof v === "function" ? v(stateSlot) : v; rerender?.() }]
   },
   useEffect(fn) {
     if (!effectRan) { effectRan = true; fn() }
@@ -156,6 +156,49 @@ assert.ok(pendingText.includes("Model attribution pending"), `pending note rende
 assert.ok(pendingText.includes("$11.75 this month · live"), "live spend total labeled while pending")
 assert.ok(pendingText.includes("Daily spend · live"), "live spend trend still rendered while pending")
 assert.ok(!pendingText.includes("undefined"), "no undefined leaked into pending text")
+
+// ---- cache behavior ---------------------------------------------------------
+// Reopening the settings page remounts the card; with a cached snapshot it
+// must paint instantly (no "Loading" flash), show the updating indicator while
+// a background refresh runs, and clear it when the refresh lands.
+let fetchCount = 0
+const baseFetch = globalThis.fetch
+globalThis.fetch = async (url) => { fetchCount += 1; return baseFetch(url) }
+
+stateSlot = undefined
+effectRan = false
+mod.__testing.setUsageCache(USAGE, Date.now() - 10 * 60_000) // 10 min old → stale
+render()
+const instantStrings = []
+walk(lastTree, instantStrings)
+const instantText = instantStrings.join(" ")
+assert.ok(instantText.includes("This month"), `cached card painted instantly (got: ${instantText.slice(0, 200)})`)
+assert.ok(instantText.includes("Updating"), "updating indicator shown during background refresh")
+assert.ok(!instantText.includes("Loading Nexus usage"), "no loading flash over cached data")
+assert.ok(instantText.includes("2.6%"), "cached data actually rendered")
+
+await new Promise((resolve) => setTimeout(resolve, 20))
+const refreshedStrings = []
+walk(lastTree, refreshedStrings)
+const refreshedText = refreshedStrings.join(" ")
+assert.ok(refreshedText.includes("This month"), "card still rendered after background refresh")
+assert.ok(!refreshedText.includes("Updating"), "updating indicator cleared once refresh lands")
+assert.ok(!refreshedText.includes("Loading Nexus usage"), "no loading state after refresh")
+
+// A cache fetched moments ago is fresh: the refetch is skipped entirely.
+stateSlot = undefined
+effectRan = false
+const fetchesBefore = fetchCount
+mod.__testing.setUsageCache(USAGE, Date.now())
+render()
+await new Promise((resolve) => setTimeout(resolve, 20))
+assert.equal(fetchCount, fetchesBefore, "fresh cache skips the background refetch")
+const freshStrings = []
+walk(lastTree, freshStrings)
+assert.ok(!freshStrings.join(" ").includes("Updating"), "no indicator when nothing is fetching")
+
+mod.__testing.clearUsageCache()
+globalThis.fetch = baseFetch
 
 console.log("client-render: ok")
 console.log("rendered text:", text.slice(0, 300))

@@ -1,7 +1,7 @@
 {
   "name": "dsh-nexus-usage-panel",
   "description": "Nexus usage dashboard panel for the DSH Web GUI: mirrors the Fireworks Nexus desktop app's Overview card (plan tier, monthly % used, 5-hour session % used, reset times) by reading the same private nexusPlans/nexusPlanUsage REST API with the machine's keychain key.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -14,7 +14,8 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "test": "node test/host-usage.mjs && node test/client-smoke.mjs && node test/client-render.mjs"
+    "test": "node test/host-usage.mjs && node test/client-smoke.mjs && node test/client-render.mjs && node test/release.mjs",
+    "release": "node scripts/release.mjs"
   },
   "files": [
     "lib",
