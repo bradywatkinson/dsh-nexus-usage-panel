@@ -23,6 +23,18 @@
       },
       "versions": [
         {
+          "version": "0.4.0",
+          "publishTimestamp": 1793857531,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/bradywatkinson/dsh-nexus-usage-panel",
+            "commit": "f3999016df80ce8d1c797b09fa7366e29d37addc"
+          },
+          "engines": {
+            "dsh": ">=0.1.1-rc.2 <0.3.0"
+          }
+        },
+        {
           "version": "0.3.0",
           "publishTimestamp": 1793812381,
           "source": {
