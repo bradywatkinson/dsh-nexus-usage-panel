@@ -14,8 +14,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "test": "node test/host-usage.mjs && node test/client-smoke.mjs && node test/client-render.mjs && node test/release.mjs",
-    "release": "node scripts/release.mjs"
+    "test": "node test/host-usage.mjs && node test/client-smoke.mjs && node test/client-render.mjs && node test/release.mjs"
   },
   "files": [
     "lib",

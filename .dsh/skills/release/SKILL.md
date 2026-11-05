@@ -1,31 +1,38 @@
 ---
 name: release
-description: Cut a versioned release of the dsh-nexus-usage-panel plugin — run the scripted pipeline, choose the bump level, and publish. Use when the user asks to release, ship, cut, or publish a version of this plugin, or to prepare the next one.
+description: Cut a versioned release of the dsh-nexus-usage-panel plugin — the git tag is the release; publish the market entries and tags. Use when the user asks to release, ship, cut, or publish a version of this plugin, or to prepare the next one.
 ---
 
 # Release dsh-nexus-usage-panel
 
-Releases go through one script — `npm run release` → [scripts/release.mjs](../../scripts/release.mjs). Never bump `version` in [package.json](../../package.json) or edit `market/index.json` by hand: the script is the single path, and it pins each market entry to the release commit's sha.
+A release is a git tag, nothing else. Never bump versions with npm tooling and never edit `market/index.json` by hand — [scripts/release.mjs](../../scripts/release.mjs) is the single path to the market index, and it pins each entry to the tag's commit sha.
 
 ## Steps
 
-1. Run the pipeline (it runs the full test suite first and aborts on any failure):
+1. Bump `version` in [package.json](../../package.json) inside the change commit: `patch` for fixes, `minor` for new features or behavior changes, `major` for breaking changes.
+
+2. Tag the release — this is the act of releasing:
 
    ```
-   npm run release -- <major|minor|patch> "<one-line release message>"
+   git tag -a v<MAJOR.MINOR.PATCH> -m "<one-line release message>"
    ```
 
-   - **Bump level**: `patch` for fixes, `minor` for new features or behavior changes, `major` for breaking changes.
-   - **Message**: one line, what changed and why, in the voice of the existing history; no version prefix — the script adds `<version>: ` itself.
-   - Useful flags: `--dry-run` to preview, `--push` to also run `git push --follow-tags`, `--engines "<range>"` when the dsh compatibility range changed (default: the previous market entry's range).
+   The message is one line, what changed and why, in the voice of the existing history. The tag must be on a commit whose package.json declares the same version — the publishing script enforces this.
 
-2. Read the output and confirm it produced exactly two commits: `<version>: <message>` (tagged `v<version>`) and `market index: <version> default` with the new entry pinned to the first commit's sha.
+3. Publish the market entry (node-only; no npm, no dependencies):
 
-3. Publishing is a separate, deliberate step: without `--push` nothing leaves the machine. Only push (`git push --follow-tags origin <branch>`) when the user asks to publish or has confirmed.
+   ```
+   node scripts/release.mjs [--dry-run] [--skip-test] [--engines "<range>"]
+   ```
+
+   It runs every `test/*.mjs` directly with node, finds `v*` tags with no market entry yet, validates each tag against its own commit, prepends the pinned entry (tag's commit sha, tag creation time, dsh engines range — default: the previous entry's), and commits `market index: <version> default`. `--dry-run` previews everything without writing.
+
+4. Publishing to the remote is a separate, deliberate step: only `git push --follow-tags origin <branch>` when the user asks to publish or has confirmed. Nothing in the flow pushes.
 
 ## Constraints
 
-- **Never amend or rebase a release commit** — the market entry already pins its sha; a rewritten sha breaks the published index.
-- The pipeline aborts if the version already has a market entry, or if package.json and the latest market entry disagree — release from a synced tree.
-- Docs are updated in the *change* commits, not the release: keep [README.md](../../README.md), [docs/](../../docs), and the AGENTS.md orders current before releasing.
-- Release commits sweep the whole working tree (`git add -A`): start from a tree containing only what should ship.
+- **Never amend or rebase a tagged release commit** — the market entry already pins its sha; a rewritten sha breaks the published index.
+- The script rejects a tag whose commit's package.json disagrees with the tag name; fix or delete the tag, never the market entry by hand.
+- The tag must exist before the market entry is written — the entry pins the tag's commit, which is why the market index is always a separate commit after the tag.
+- Docs are updated in the *change* commits, not the release: keep [README.md](../../README.md), [docs/](../../docs), and the AGENTS.md orders current before tagging.
+- Release work happens on a clean tree: the market commits touch only `market/index.json`, but unrelated staged changes would ride along in the commit.

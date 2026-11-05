@@ -1,27 +1,24 @@
 #!/usr/bin/env node
-// Versioned release pipeline for dsh-nexus-usage-panel.
+// Git tag-driven release publishing for dsh-nexus-usage-panel.
 //
-// Codifies the repo's release convention (see the git history and the root
-// AGENTS.md "On release" order) into one audited command:
+// A release IS a git tag. Bump `version` in package.json inside the change,
+// tag the release (`git tag -a v<MAJOR.MINOR.PATCH> -m "<message>"`), then run
+// this script to publish the matching market entries. Node builtins only —
+// no npm and no dependencies anywhere in the flow:
 //
-//   node scripts/release.mjs <major|minor|patch> "<release message>"
-//     [--engines "<range>"]  dsh engines range for the market entry
-//                           (default: the previous entry's range)
-//     [--no-tag]             skip the v<version> git tag
-//     [--push]               push the release branch and tag after committing
-//     [--skip-test]          skip `npm test` (CI or an immediate re-run)
-//     [--dry-run]            print every step without writing or committing
+//   node scripts/release.mjs [--dry-run] [--skip-test] [--engines "<range>"]
 //
-// Steps: npm test → bump package.json → release commit "<version>: <message>"
-// → annotated tag v<version> → prepend the pinned market entry (release commit
-// hash + dsh engines range) to market/index.json → market commit
-// "market index: <version> default" → optional push.
+// Steps: run every test/*.mjs directly with node → collect v* tags that have
+// no market entry yet (oldest first) → validate each tag (its own commit's
+// package.json must declare the tag's version) → prepend the pinned market
+// entry (the tag's commit sha, the tag's creation time, the dsh engines
+// range) → one "market index: <version> default" commit per tag. Nothing is
+// pushed or published anywhere else; `git push --follow-tags` is the publish.
 //
-// Zero dependencies: Node builtins only, like lib/index.js. The pure helpers
-// are exported and unit-tested by test/release.mjs.
+// The pure helpers are exported and unit-tested by test/release.mjs.
 
 import { execFileSync } from "node:child_process";
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,6 +27,8 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // ---- pure helpers (unit-tested by test/release.mjs) ------------------------
 
 const VERSION_RE = /^(\d+)\.(\d+)\.(\d+)$/;
+const TAG_RE = /^v(\d+\.\d+\.\d+)$/;
+
 /** "0.3.0" → { major, minor, patch }; throws on any other shape. */
 export function parseVersion(version) {
 	const match = VERSION_RE.exec(version);
@@ -37,13 +36,10 @@ export function parseVersion(version) {
 	return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
 }
 
-/** "0.3.0" + "major"|"minor"|"patch" → "1.0.0". Prerelease tags are rejected. */
-export function bumpVersion(version, kind) {
-	const { major, minor, patch } = parseVersion(version);
-	if (kind === "major") return `${major + 1}.0.0`;
-	if (kind === "minor") return `${major}.${minor + 1}.0`;
-	if (kind === "patch") return `${major}.${minor}.${patch + 1}`;
-	throw new Error(`unknown release kind "${kind}": expected major, minor, or patch`);
+/** Release tag name → version ("v0.4.0" → "0.4.0"); anything else → null. */
+export function tagVersion(tag) {
+	const match = TAG_RE.exec(String(tag).trim());
+	return match ? match[1] : null;
 }
 
 /** "git@host:org/repo.git" | "ssh://git@host/org/repo.git" → "https://host/org/repo". */
@@ -80,27 +76,22 @@ export function prependMarketVersion(market, pluginName, entry) {
 
 // ---- CLI -------------------------------------------------------------------
 
-const usage = 'usage: node scripts/release.mjs <major|minor|patch> "<message>" [--engines <range>] [--no-tag] [--push] [--skip-test] [--dry-run]';
+const usage = 'usage: node scripts/release.mjs [--dry-run] [--skip-test] [--engines "<range>"]';
 
 function parseArgs(argv) {
-	const positional = [];
-	const flags = { engines: null, tag: true, push: false, skipTest: false, dryRun: false };
+	const flags = { engines: null, skipTest: false, dryRun: false };
 	for (let i = 0; i < argv.length; i++) {
 		const arg = argv[i];
-		if (arg === "--engines") flags.engines = argv[++i];
-		else if (arg === "--no-tag") flags.tag = false;
-		else if (arg === "--push") flags.push = true;
+		if (arg === "--dry-run") flags.dryRun = true;
 		else if (arg === "--skip-test") flags.skipTest = true;
-		else if (arg === "--dry-run") flags.dryRun = true;
+		else if (arg === "--engines") flags.engines = argv[++i];
 		else if (arg.startsWith("--")) throw new Error(`unknown flag ${arg}\n${usage}`);
-		else positional.push(arg);
+		else throw new Error(`unexpected argument ${arg}\n${usage}`);
 	}
-	const [kind, message] = positional;
-	if (!["major", "minor", "patch"].includes(kind) || !message?.trim()) throw new Error(usage);
-	return { kind, message: message.trim(), ...flags };
+	return flags;
 }
 
-/** Run a command, capture stdout; `inherit` streams npm test output live. */
+/** Run a command, capture stdout; `inherit` streams test output live. */
 function run(command, args, { inherit = false } = {}) {
 	const result = execFileSync(command, args, {
 		cwd: root, encoding: "utf8", stdio: inherit ? "inherit" : ["ignore", "pipe", "inherit"],
@@ -116,57 +107,63 @@ async function main() {
 	const market = JSON.parse(await readFile(marketPath, "utf8"));
 	const plugin = market.plugins.find((p) => p.name === pkg.name);
 	if (!plugin) throw new Error(`market has no plugin named "${pkg.name}"`);
+	const enginesDsh = opts.engines ?? plugin.versions[0]?.engines?.dsh;
 
-	const next = bumpVersion(pkg.version, opts.kind);
-	if (plugin.versions.some((v) => v.version === next)) {
-		throw new Error(`market already has an entry for ${next}`);
-	}
-	const latest = plugin.versions[0];
-	if (latest && latest.version !== pkg.version) {
-		throw new Error(`package.json (${pkg.version}) and the latest market entry (${latest.version}) disagree — release from a synced tree`);
-	}
-	const enginesDsh = opts.engines ?? latest?.engines?.dsh;
-	if (!enginesDsh) throw new Error("no dsh engines range: pass --engines \"<range>\"");
-
-	if (!opts.skipTest) run("npm", ["test"], { inherit: true });
-	run("git", ["rev-parse", "--is-inside-work-tree"]);
-
-	const releaseMessage = `${next}: ${opts.message}`;
-	console.log(`release: ${pkg.version} → ${next}${opts.dryRun ? " (dry run)" : ""}`);
-
-	if (!opts.dryRun) {
-		await writeFile(join(root, "package.json"), `${JSON.stringify({ ...pkg, version: next }, null, 2)}\n`);
-		run("git", ["add", "-A"]);
-		run("git", ["commit", "-m", releaseMessage]);
-		if (opts.tag) run("git", ["tag", "-a", `v${next}`, "-m", opts.message]);
+	if (!opts.skipTest) {
+		// Node directly: the release flow has no npm dependency.
+		const tests = (await readdir(join(root, "test"))).filter((f) => f.endsWith(".mjs")).sort();
+		if (!tests.length) throw new Error("no test files found under test/");
+		for (const test of tests) run(process.execPath, [join(root, "test", test)], { inherit: true });
 	}
 
-	const commit = run("git", ["rev-parse", "HEAD"]);
-	console.log(`release: commit ${commit}${opts.tag ? `, tag v${next}` : ", untagged"}`);
+	const known = new Set(plugin.versions.map((v) => v.version));
+	const tags = run("git", ["tag", "-l", "v*", "--sort=v:refname"]).split("\n").filter(Boolean);
+	const pending = [];
+	for (const tag of tags) {
+		const version = tagVersion(tag);
+		if (!version) { console.log(`market: skipping ${tag} — not a v<MAJOR.MINOR.PATCH> release tag`); continue; }
+		if (known.has(version)) continue;
+		pending.push({ tag, version });
+	}
+	if (!pending.length) {
+		console.log(`market: every v* tag already has an entry (working tree at ${pkg.version})`);
+		console.log("release: nothing to publish");
+		return;
+	}
 
-	// The market entry must pin the release commit itself, so it can only be
-	// written after that commit exists — hence the separate market commit,
-	// matching every prior release in the history.
-	const remote = normalizeRemote(run("git", ["remote", "get-url", "origin"]));
-	const entry = buildMarketEntry({ version: next, commit, timestamp: Math.floor(Date.now() / 1000), sourceUrl: remote, enginesDsh });
-	const updated = prependMarketVersion(market, pkg.name, entry);
-	console.log(`market: ${next} @ ${commit} (dsh ${enginesDsh}) → ${remote}`);
+	const sourceUrl = normalizeRemote(run("git", ["remote", "get-url", "origin"]));
+	const entries = [];
+	for (const { tag, version } of pending) {
+		// The tag's own commit must agree with the tag: the version is declared
+		// in the commit, the tag only names it.
+		const commit = run("git", ["rev-parse", `${tag}^{commit}`]);
+		const taggedPkg = JSON.parse(run("git", ["show", `${tag}:package.json`]));
+		if (taggedPkg.version !== version) {
+			throw new Error(`${tag} points at ${commit.slice(0, 12)} whose package.json says ${taggedPkg.version} — fix or delete the tag`);
+		}
+		const timestamp = Number(run("git", ["for-each-ref", "--format=%(creatordate:unix)", `refs/tags/${tag}`]));
+		entries.push({ version, entry: buildMarketEntry({ version, commit, timestamp, sourceUrl, enginesDsh }) });
+		console.log(`market: ${version} @ ${commit} (tagged ${new Date(timestamp * 1000).toISOString()}, dsh ${enginesDsh})`);
+	}
 
-	if (!opts.dryRun) {
-		await writeFile(marketPath, `${JSON.stringify(updated, null, 2)}\n`);
+	if (opts.dryRun) {
+		console.log(`release: dry run — ${entries.length} market entr${entries.length === 1 ? "y" : "ies"} would be committed, nothing written`);
+		return;
+	}
+
+	// The market entry pins the tag's commit, so it can only be written after
+	// the tag exists — hence the separate market commit, matching every prior
+	// release in the history.
+	let updated = market;
+	for (const { entry } of entries) updated = prependMarketVersion(updated, pkg.name, entry);
+	await writeFile(marketPath, `${JSON.stringify(updated, null, 2)}\n`);
+	for (const { version } of entries) {
 		run("git", ["add", "market/index.json"]);
-		run("git", ["commit", "-m", `market index: ${next} default`]);
+		run("git", ["commit", "-m", `market index: ${version} default`]);
 	}
 
-	if (opts.push) {
-		const branch = run("git", ["rev-parse", "--abbrev-ref", "HEAD"]);
-		run("git", ["push", "--follow-tags", "origin", branch], { inherit: true });
-		console.log(`push: origin/${branch} with tags`);
-	} else {
-		console.log("push: skipped (run git push --follow-tags to publish)");
-	}
-
-	console.log(`release: done — ${next}${opts.dryRun ? " (dry run, nothing written)" : ""}`);
+	console.log("push: skipped (git push --follow-tags publishes the releases)");
+	console.log(`release: done — published ${entries.map((e) => e.version).join(", ")}`);
 }
 
 /** Only execute when invoked directly, so test/release.mjs can import helpers. */

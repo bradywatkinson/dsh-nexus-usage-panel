@@ -1,26 +1,27 @@
 // Release pipeline unit tests: the pure helpers in scripts/release.mjs.
-// Guards the release mechanics (semver bumps, remote normalization, market
-// entry shape) so a bad release can't be scripted by accident.
+// Guards the tag-driven release mechanics (tag parsing, remote normalization,
+// market entry shape) so a bad release can't be scripted by accident.
 import assert from "node:assert/strict"
 import { readFile } from "node:fs/promises"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { bumpVersion, buildMarketEntry, normalizeRemote, parseVersion, prependMarketVersion } from "../scripts/release.mjs"
+import { buildMarketEntry, normalizeRemote, parseVersion, prependMarketVersion, tagVersion } from "../scripts/release.mjs"
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-// ---- parseVersion / bumpVersion --------------------------------------------
+// ---- parseVersion / tagVersion ---------------------------------------------
 
 assert.deepEqual(parseVersion("0.3.0"), { major: 0, minor: 3, patch: 0 })
 assert.throws(() => parseVersion("0.3"), "two-part versions rejected")
 assert.throws(() => parseVersion("0.3.0-rc.1"), "prerelease tags rejected (releases are stable triples)")
 assert.throws(() => parseVersion("latest"), "garbage rejected")
 
-assert.equal(bumpVersion("0.3.0", "patch"), "0.3.1")
-assert.equal(bumpVersion("0.3.0", "minor"), "0.4.0")
-assert.equal(bumpVersion("0.3.0", "major"), "1.0.0")
-assert.equal(bumpVersion("0.3.9", "patch"), "0.3.10")
-assert.throws(() => bumpVersion("0.3.0", "beta"), "unknown kinds rejected")
+assert.equal(tagVersion("v0.4.0"), "0.4.0", "annotated release tag accepted")
+assert.equal(tagVersion("v0.4.10"), "0.4.10", "multi-digit parts accepted")
+assert.equal(tagVersion("0.4.0"), null, "missing v prefix rejected")
+assert.equal(tagVersion("v0.4"), null, "two-part tag rejected")
+assert.equal(tagVersion("v0.4.0-rc.1"), null, "prerelease tag rejected")
+assert.equal(tagVersion("vbeta"), null, "non-numeric tag rejected")
 
 // ---- normalizeRemote -------------------------------------------------------
 
