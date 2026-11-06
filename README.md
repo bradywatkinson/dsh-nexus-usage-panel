@@ -20,6 +20,8 @@ Auth uses the per-machine key the Nexus desktop app minted at sign-in, stored in
 
 Note: `nexusPlanUsage` exposes **percentages of your plan limits only** — but the savings endpoint does return dollar spend to a member key (see [docs/milestone-2-schema.md](docs/milestone-2-schema.md)). Per-model spend arrives only through `usageCosts:query`, whose attribution **lags the meters** (`INCOMPLETE`, no rows early in a period): while it's pending, the panel shows an attribution-pending note plus a **live daily-spend trend** read from the savings pipeline, and widens the model query to the last 30 days so prior-period rows display as soon as they're attributed. DSH sessions themselves run through Nexus Auto (`api.fireworks.ai/inference/v1`, model `auto`); Fireworks routes server-side and does not echo the routed model id to the client.
 
+The daily-spend trend renders as a **GitHub-style contribution grid** (Sunday-aligned weeks, month labels, Nexus-pink heat levels, Less→More legend) by default, with branded hover tooltips on each day (`Tue, Nov 3 · $4.25`, "no spend" for gaps); the ▦/☰ picker on the section header switches to a per-day table. The choice is a host-side setting persisted at `~/.dsh/nexus-usage-panel.json` and served from `GET/POST /api/dsh-nexus-usage/config` (`{"spendStyle": "grid" | "table"}`, anything else falls back to `grid`).
+
 ## Install
 
 ```sh

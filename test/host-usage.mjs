@@ -1,9 +1,12 @@
 // Host-half test: response shaping and the read pipeline against a mocked
 // gateway. Run: node test/host-usage.mjs
 import assert from "node:assert/strict"
+import { unlink } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { __testing } from "../lib/index.js"
 
-const { currentPlan, seatUsage, gatewayBase, readUsage, spendSummary, spendDays, savingsModelName, savingsStatus, spendRange, moneyValue } = __testing
+const { currentPlan, seatUsage, gatewayBase, readUsage, spendSummary, spendDays, savingsModelName, savingsStatus, spendRange, moneyValue, spendStyleValue, readSettings, writeSettings } = __testing
 
 // currentPlan picks the non-ended plan and maps tier names.
 const plans = [
@@ -130,6 +133,22 @@ assert.equal(widenFailed.breakdown.widened, false)
 
 // Pure shapers
 assert.equal(moneyValue({ units: "2", nanos: 5e8 }), 2.5)
+
+// The display style: "grid" is the default, unknown values fall back to it.
+assert.equal(spendStyleValue("grid"), "grid")
+assert.equal(spendStyleValue("table"), "table")
+assert.equal(spendStyleValue("bogus"), "grid")
+assert.equal(spendStyleValue(undefined), "grid")
+assert.equal(spendStyleValue(null), "grid")
+
+// Display settings persist to disk; a missing or malformed file answers the default.
+const settingsPath = join(tmpdir(), `nexus-usage-panel-test-${process.pid}.json`)
+await writeSettings({ spendStyle: "table" }, settingsPath)
+assert.deepEqual(await readSettings(settingsPath), { spendStyle: "table" })
+await writeSettings({ spendStyle: spendStyleValue("nonsense") }, settingsPath)
+assert.deepEqual(await readSettings(settingsPath), { spendStyle: "grid" })
+await unlink(settingsPath)
+assert.deepEqual(await readSettings(settingsPath), { spendStyle: "grid" }, "missing settings file answers the grid default")
 assert.equal(moneyValue(null), 0)
 assert.equal(spendSummary([]).models.length, 0)
 assert.deepEqual(spendDays([]), { currency: "USD", total: 0, days: [] })

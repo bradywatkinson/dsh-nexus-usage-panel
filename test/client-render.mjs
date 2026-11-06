@@ -31,8 +31,21 @@ const USAGE = {
   savings: { status: "ready", baselineLabel: "Claude Opus 5.5", month: { saved: 6.64, savedFraction: 0.67, cacheHitFraction: 0.95, currency: "USD" }, spend: { currency: "USD", total: 11.75, days: [{ date: "2026-11-03", total: 4.25 }, { date: "2026-11-04", total: 7.5 }] } },
 }
 
-globalThis.fetch = async (url) => {
-  assert.ok(String(url).includes("/api/dsh-nexus-usage/usage"), `unexpected fetch ${url}`)
+const CONFIG = { ok: true, spendStyle: "grid" }
+const configPosts = []
+globalThis.fetch = async (url, init) => {
+  const target = String(url)
+  if (target.includes("/api/dsh-nexus-usage/config")) {
+    assert.ok(!init?.method || init.method === "POST", `unexpected config method ${init?.method}`)
+    if (init?.method === "POST") {
+      const body = JSON.parse(init.body)
+      assert.deepEqual(Object.keys(body), ["spendStyle"], "config POST carries only the style")
+      configPosts.push(body)
+      return { json: async () => ({ ok: true, spendStyle: body.spendStyle }) }
+    }
+    return { json: async () => CONFIG }
+  }
+  assert.ok(target.includes("/api/dsh-nexus-usage/usage"), `unexpected fetch ${target}`)
   return { json: async () => USAGE }
 }
 globalThis.setInterval = () => 0
@@ -140,6 +153,25 @@ assert.ok(text.includes("Pro"), "tier badge rendered")
 assert.ok(text.includes("Spend by model"), "breakdown section rendered")
 assert.ok(text.includes("accounts/fireworks/models/glm-5p3"), "model row rendered")
 assert.ok(text.includes("Daily spend · live"), "live spend trend rendered")
+// The daily-spend default is the GitHub-style grid, not the table.
+assert.ok(text.includes("Less") && text.includes("More"), "grid legend rendered")
+assert.ok(text.includes("Total $11.75"), "grid total rendered")
+assert.ok(strings.includes("▦") && strings.includes("☰"), "grid/table picker rendered")
+assert.ok(strings.includes("Nov"), "grid month label rendered")
+assert.ok(!/\bDay\b/.test(text), "table header absent in the default grid view")
+// Grid cells carry branded hover tooltips ("date · amount", "no spend" for gaps).
+const tips = []
+const walkTips = (node) => {
+  if (node == null || typeof node === "boolean") return
+  if (Array.isArray(node)) { node.forEach(walkTips); return }
+  if (typeof node === "string" || typeof node === "number") return
+  if (typeof node.type === "function") { walkTips(node.type(node.props)); return }
+  if (typeof node.props?.["data-tip"] === "string") tips.push(node.props["data-tip"])
+  walkTips(node.props?.children)
+}
+walkTips(lastTree)
+assert.ok(tips.includes("Tue, Nov 3 · $4.25"), `day tooltip rendered (got: ${tips.join(" | ")})`)
+assert.ok(tips.includes("Wed, Nov 4 · $7.50"), "second day tooltip rendered")
 assert.ok(text.includes("$1.50 this period"), "attributed window total rendered")
 assert.ok(text.includes("$6.64"), "savings amount rendered")
 assert.ok(text.includes("cache hit"), "cache hit rendered")
@@ -163,7 +195,7 @@ assert.ok(!pendingText.includes("undefined"), "no undefined leaked into pending 
 // a background refresh runs, and clear it when the refresh lands.
 let fetchCount = 0
 const baseFetch = globalThis.fetch
-globalThis.fetch = async (url) => { fetchCount += 1; return baseFetch(url) }
+globalThis.fetch = async (url, init) => { fetchCount += 1; return baseFetch(url, init) }
 
 stateSlot = undefined
 effectRan = false
@@ -196,6 +228,57 @@ assert.equal(fetchCount, fetchesBefore, "fresh cache skips the background refetc
 const freshStrings = []
 walk(lastTree, freshStrings)
 assert.ok(!freshStrings.join(" ").includes("Updating"), "no indicator when nothing is fetching")
+
+// ---- display-style switch ---------------------------------------------------
+// Clicking the picker's table button switches the section to the table view
+// and persists the choice through the config route.
+const findButton = (node, glyph) => {
+  if (node == null || typeof node === "boolean") return null
+  if (Array.isArray(node)) {
+    for (const child of node) { const hit = findButton(child, glyph); if (hit) return hit }
+    return null
+  }
+  if (typeof node === "string" || typeof node === "number") return null
+  if (typeof node.type === "function") return findButton(node.type(node.props), glyph)
+  if (node.props?.children === glyph && typeof node.props?.onClick === "function") return node
+  return findButton(node.props?.children, glyph)
+}
+const tableButton = findButton(lastTree, "☰")
+assert.ok(tableButton, "table-style picker button rendered")
+assert.equal(tableButton.props["aria-pressed"], false, "table button starts unpressed")
+tableButton.props.onClick()
+const tableStrings = []
+walk(lastTree, tableStrings)
+const tableText = tableStrings.join(" ")
+assert.ok(/\bDay\b/.test(tableText), "table header rendered after switching styles")
+assert.ok(tableText.includes("Tue, Nov 3"), "per-day row rendered in the table view")
+assert.ok(tableText.includes("Total $11.75"), "total row rendered in the table view")
+assert.ok(tableText.includes("$4.25"), "per-day amount rendered in the table view")
+assert.deepEqual(configPosts, [{ spendStyle: "table" }], "the style choice was POSTed to the config route")
+
+// A background refresh landing must keep the chosen style (regression: the
+// poll used to replace the whole state object and reset the view to grid).
+effectRan = false
+mod.__testing.setUsageCache(USAGE, Date.now() - 10 * 60_000) // stale → the remount refreshes
+render()
+await new Promise((resolve) => setTimeout(resolve, 20))
+const afterRefreshStrings = []
+walk(lastTree, afterRefreshStrings)
+assert.ok(/\bDay\b/.test(afterRefreshStrings.join(" ")), "the table view survives a background refresh")
+assert.ok(afterRefreshStrings.join(" ").includes("Total $11.75"), "the card still renders after the refresh")
+
+// Remounting the card keeps the in-page choice: the picker sets a session
+// override that paints instantly and outlives persistence failures.
+stateSlot = undefined
+effectRan = false
+render()
+const remountStrings = []
+walk(lastTree, remountStrings)
+assert.ok(/\bDay\b/.test(remountStrings.join(" ")), "the session style paints instantly on remount")
+await new Promise((resolve) => setTimeout(resolve, 20))
+const settledStrings = []
+walk(lastTree, settledStrings)
+assert.ok(/\bDay\b/.test(settledStrings.join(" ")), "the session style survives the config load on remount")
 
 mod.__testing.clearUsageCache()
 globalThis.fetch = baseFetch
